@@ -108,6 +108,17 @@ class _PROXY_LiteLLMManagedFiles(CustomLogger, BaseFileEndpoints):
 
         if file_object is not None:
             db_data["file_object"] = file_object.model_dump_json()
+            # Extract storage metadata from hidden params if present
+            hidden_params = getattr(file_object, "_hidden_params", {}) or {}
+            if "storage_backend" in hidden_params:
+                db_data["storage_backend"] = hidden_params["storage_backend"]
+            if "storage_url" in hidden_params:
+                db_data["storage_url"] = hidden_params["storage_url"]
+            
+            verbose_logger.debug(
+                f"Storage metadata: storage_backend={db_data.get('storage_backend')}, "
+                f"storage_url={db_data.get('storage_url')}"
+            )
 
         result = await self.prisma_client.db.litellm_managedfiletable.create(
             data=db_data
@@ -289,9 +300,20 @@ class _PROXY_LiteLLMManagedFiles(CustomLogger, BaseFileEndpoints):
         ### HANDLE TRANSFORMATIONS ###
         if call_type == CallTypes.completion.value:
             messages = data.get("messages")
+            model = data.get("model", "")
             if messages:
                 file_ids = self.get_file_ids_from_messages(messages)
                 if file_ids:
+                    # Check if any files are stored in storage backends and need base64 conversion
+                    # This is needed for Vertex AI/Gemini which requires base64 content
+                    is_vertex_ai = model and ("vertex_ai" in model or "gemini" in model.lower())
+                    if is_vertex_ai:
+                        await self._convert_storage_files_to_base64(
+                            messages=messages,
+                            file_ids=file_ids,
+                            litellm_parent_otel_span=user_api_key_dict.parent_otel_span,
+                        )
+                    
                     model_file_id_mapping = await self.get_model_file_id_mapping(
                         file_ids, user_api_key_dict.parent_otel_span
                     )
@@ -865,3 +887,95 @@ class _PROXY_LiteLLMManagedFiles(CustomLogger, BaseFileEndpoints):
             )
         else:
             raise Exception(f"LiteLLM Managed File object with id={file_id} not found")
+
+    async def _convert_storage_files_to_base64(
+        self,
+        messages: List[AllMessageValues],
+        file_ids: List[str],
+        litellm_parent_otel_span: Optional[Span],
+    ) -> None:
+        """
+        Convert files stored in storage backends to base64 format for Vertex AI/Gemini.
+        
+        This method checks if any managed files are stored in storage backends,
+        downloads them, and converts them to base64 format in the messages.
+        """
+        import base64
+        
+        # Check each file_id to see if it's stored in a storage backend
+        for file_id in file_ids:
+            if not _is_base64_encoded_unified_file_id(file_id):
+                continue
+            
+            # Check database for storage backend info
+            db_file = await self.prisma_client.db.litellm_managedfiletable.find_first(
+                where={"unified_file_id": file_id}
+            )
+            
+            if not db_file or not db_file.storage_backend or not db_file.storage_url:
+                continue
+            
+            # File is stored in a storage backend, download and convert to base64
+            try:
+                from litellm.llms.base_llm.files.storage_backend_factory import get_storage_backend
+                
+                storage_backend_name = db_file.storage_backend
+                storage_url = db_file.storage_url
+                
+                # Get storage backend (uses same env vars as callback)
+                try:
+                    storage_backend = get_storage_backend(storage_backend_name)
+                except ValueError as e:
+                    verbose_logger.warning(
+                        f"Storage backend '{storage_backend_name}' error for file {file_id}: {str(e)}"
+                    )
+                    continue
+                
+                file_content = await storage_backend.download_file(storage_url)
+                
+                # Determine content type from file object or storage URL
+                content_type = "application/octet-stream"
+                if db_file.file_object:
+                    import json
+                    try:
+                        file_obj = json.loads(db_file.file_object) if isinstance(db_file.file_object, str) else db_file.file_object
+                        if isinstance(file_obj, dict):
+                            # Try to get content type from filename
+                            filename = file_obj.get("filename", "")
+                            if filename:
+                                # Simple MIME type detection
+                                if filename.endswith(".pdf"):
+                                    content_type = "application/pdf"
+                                elif filename.endswith((".png", ".jpg", ".jpeg")):
+                                    content_type = f"image/{filename.split('.')[-1].lower()}"
+                                elif filename.endswith((".mp3", ".wav", ".m4a")):
+                                    content_type = f"audio/{filename.split('.')[-1].lower()}"
+                    except Exception:
+                        pass
+                
+                # Convert to base64
+                base64_data = base64.b64encode(file_content).decode("utf-8")
+                base64_data_uri = f"data:{content_type};base64,{base64_data}"
+                
+                # Update messages to use base64 instead of file_id
+                for message in messages:
+                    if message.get("role") == "user":
+                        content = message.get("content")
+                        if content and isinstance(content, list):
+                            for element in content:
+                                if element.get("type") == "file":
+                                    file_element = cast(ChatCompletionFileObject, element)
+                                    file_element_file = file_element.get("file", {})
+                                    if file_element_file.get("file_id") == file_id:
+                                        # Replace file_id with base64 data
+                                        file_element_file["file_data"] = base64_data_uri
+                                        file_element_file.pop("file_id", None)
+                                        verbose_logger.debug(
+                                            f"Converted file {file_id} from storage backend to base64"
+                                        )
+            except Exception as e:
+                verbose_logger.exception(
+                    f"Error converting file {file_id} from storage backend to base64: {str(e)}"
+                )
+                # Continue with other files even if one fails
+                continue

@@ -135,16 +135,124 @@ async def route_create_file(
     router_model: Optional[str],
     custom_llm_provider: str,
     model: Optional[str] = None,
+    target_storage: Optional[str] = "default",
 ) -> OpenAIFileObject:
     """
     Route file creation request to the appropriate provider.
     
     Priority:
-    1. If model parameter provided -> use model credentials and encode ID
-    2. If enable_loadbalancing_on_batch_endpoints -> deprecated loadbalancing
-    3. If target_model_names_list -> managed files (requires DB)
-    4. Else -> use custom_llm_provider with files_settings
+    1. If target_storage is specified and not "default" -> use storage backend
+    2. If model parameter provided -> use model credentials and encode ID
+    3. If enable_loadbalancing_on_batch_endpoints -> deprecated loadbalancing
+    4. If target_model_names_list -> managed files (requires DB)
+    5. Else -> use custom_llm_provider with files_settings
     """
+    
+    # NEW: Handle custom storage backend
+    if target_storage and target_storage != "default":
+        from litellm.llms.base_llm.files.storage_backend_factory import get_storage_backend
+        from litellm.litellm_core_utils.prompt_templates.common_utils import extract_file_data
+        
+        # Create storage backend instance (uses same env vars as corresponding callback)
+        try:
+            storage_backend = get_storage_backend(target_storage)
+        except ValueError as e:
+            raise ProxyException(
+                message=str(e),
+                type="invalid_request_error",
+                param="target_storage",
+                code=400,
+            )
+        
+        # Extract file data
+        file_data = extract_file_data(_create_file_request.get("file"))
+        file_content = file_data["content"]
+        filename = file_data.get("filename", "file")
+        content_type = file_data.get("content_type", "application/octet-stream")
+        
+        # Upload to storage backend
+        storage_url = await storage_backend.upload_file(
+            file_content=file_content,
+            filename=filename,
+            content_type=content_type,
+            path_prefix="",
+            file_naming_strategy="uuid",
+        )
+        
+        # Create a file object with the storage URL
+        from litellm.types.llms.openai import OpenAIFileObject
+        from litellm._uuid import uuid as uuid_module
+        import time
+        
+        file_id = f"file-{uuid_module.uuid4().hex[:24]}"
+        file_object = OpenAIFileObject(
+            id=file_id,
+            object="file",
+            purpose=purpose,
+            created_at=int(time.time()),
+            bytes=len(file_content),
+            filename=filename,
+            status="uploaded",
+        )
+        
+        # Store storage metadata in hidden params
+        if not hasattr(file_object, "_hidden_params") or file_object._hidden_params is None:
+            file_object._hidden_params = {}
+        file_object._hidden_params.update({
+            "storage_backend": target_storage,
+            "storage_url": storage_url,
+        })
+        
+        verbose_proxy_logger.debug(
+            f"Storage backend upload complete: backend={target_storage}, url={storage_url}"
+        )
+        
+        # If target_model_names_list is provided, store in managed files
+        if target_model_names_list:
+            managed_files_obj = proxy_logging_obj.get_proxy_hook("managed_files")
+            if managed_files_obj and isinstance(managed_files_obj, BaseFileEndpoints):
+                # Create model mappings using storage URL
+                model_mappings = {
+                    model_name: storage_url
+                    for model_name in target_model_names_list
+                }
+                
+                # Create unified file ID
+                import base64
+                from litellm.types.utils import SpecialEnums
+                from litellm._uuid import uuid as uuid_module
+                
+                file_data = extract_file_data(_create_file_request.get("file"))
+                file_type = file_data.get("content_type", "application/octet-stream")
+                
+                unified_file_id_str = SpecialEnums.LITELLM_MANAGED_FILE_COMPLETE_STR.value.format(
+                    file_type,
+                    str(uuid_module.uuid4()),
+                    ",".join(target_model_names_list),
+                    file_id,
+                    None,
+                )
+                
+                base64_unified_file_id = (
+                    base64.urlsafe_b64encode(unified_file_id_str.encode()).decode().rstrip("=")
+                )
+                
+                file_object.id = base64_unified_file_id
+                
+                verbose_proxy_logger.debug(
+                    f"Storing file in managed files: unified_id={base64_unified_file_id}, "
+                    f"storage_backend={target_storage}, storage_url={storage_url}"
+                )
+                
+                await managed_files_obj.store_unified_file_id(
+                    file_id=base64_unified_file_id,
+                    file_object=file_object,
+                    litellm_parent_otel_span=user_api_key_dict.parent_otel_span,
+                    model_mappings=model_mappings,
+                    user_api_key_dict=user_api_key_dict,
+                )
+        
+        return file_object
     
     # NEW: Handle model-based routing (no DB required)
     if model is not None:
@@ -305,6 +413,47 @@ async def create_file(
             or request.headers.get("x-litellm-model")
         )
 
+        # Extract target_storage from form data
+        # OpenAI client sends extra_body fields directly as form fields
+        target_storage: Optional[str] = None
+        try:
+            form_data = await request.form()
+            # Check if target_storage is a direct form field
+            if "target_storage" in form_data:
+                target_storage = form_data.get("target_storage")
+            # Also check extra_body as JSON string
+            elif "extra_body" in form_data:
+                extra_body_form = form_data.get("extra_body")
+                if extra_body_form:
+                    import json
+                    try:
+                        if isinstance(extra_body_form, str):
+                            extra_body_parsed = json.loads(extra_body_form)
+                        else:
+                            extra_body_parsed = extra_body_form
+                        if isinstance(extra_body_parsed, dict):
+                            target_storage = extra_body_parsed.get("target_storage")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        except Exception:
+            pass
+        
+        # Fallback to request_body.extra_body for non-form requests
+        if not target_storage:
+            extra_body = request_body.get("extra_body") or {}
+            if isinstance(extra_body, str):
+                import json
+                try:
+                    extra_body = json.loads(extra_body)
+                except json.JSONDecodeError:
+                    extra_body = {}
+            if isinstance(extra_body, dict):
+                target_storage = extra_body.get("target_storage")
+        
+        # Default to "default" if not specified
+        if not target_storage:
+            target_storage = "default"
+
         target_model_names_list = (
             target_model_names.split(",") if target_model_names else []
         )
@@ -368,6 +517,7 @@ async def create_file(
             router_model=router_model,
             custom_llm_provider=custom_llm_provider,
             model=model_param,
+            target_storage=target_storage,
         )
 
         if response is None:
@@ -525,6 +675,38 @@ async def get_file_content(
                     param="None",
                     code=500,
                 )
+            
+            # Check if file is stored in a storage backend (check DB)
+            if hasattr(managed_files_obj, "prisma_client") and managed_files_obj.prisma_client:
+                db_file = await managed_files_obj.prisma_client.db.litellm_managedfiletable.find_first(
+                    where={"unified_file_id": file_id}
+                )
+                if db_file and db_file.storage_backend and db_file.storage_url:
+                    # File is stored in a storage backend, download it
+                    from litellm.llms.base_llm.files.storage_backend_factory import get_storage_backend
+                    
+                    storage_backend_name = db_file.storage_backend
+                    storage_url = db_file.storage_url
+                    
+                    try:
+                        # Get storage backend (uses same env vars as callback)
+                        storage_backend = get_storage_backend(storage_backend_name)
+                        file_content = await storage_backend.download_file(storage_url)
+                        
+                        # Return file content
+                        from fastapi.responses import Response as FastAPIResponse
+                        return FastAPIResponse(
+                            content=file_content,
+                            media_type="application/octet-stream",
+                        )
+                    except ValueError as e:
+                        raise ProxyException(
+                            message=f"Storage backend error: {str(e)}",
+                            type="invalid_request_error",
+                            param="file_id",
+                            code=400,
+                        )
+            
             model = cast(Optional[str], data.get("model"))
             if model:
                 response = await llm_router.afile_content(
