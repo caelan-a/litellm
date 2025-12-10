@@ -60,6 +60,34 @@ class VertexAIAnthropicConfig(AnthropicConfig):
         "computer-use-2025-01-24",       # Computer use (newer version)
     }
 
+    def _sanitize_tool_choice(self, optional_params: dict) -> dict:
+        """
+        Sanitize tool_choice parameter to handle invalid values from clients like Cursor.
+        
+        Cursor sometimes sends tool_choice={'type': 'tool'} without the required 'name' field.
+        Anthropic requires tool_choice.tool.name when type is 'tool'.
+        
+        This method drops invalid tool_choice values to prevent API errors.
+        """
+        tool_choice = optional_params.get("tool_choice")
+        if tool_choice is None:
+            return optional_params
+        
+        # If tool_choice is a dict with type='tool' but missing tool.name, drop it
+        if isinstance(tool_choice, dict):
+            tc_type = tool_choice.get("type")
+            if tc_type == "tool":
+                # Check if 'tool' or 'name' is present and valid
+                tool_info = tool_choice.get("tool", {})
+                if not isinstance(tool_info, dict) or not tool_info.get("name"):
+                    # Invalid tool_choice - drop it
+                    import sys
+                    print(f"[DEBUG _sanitize_tool_choice] Dropping invalid tool_choice: {tool_choice}", file=sys.stderr)
+                    optional_params = optional_params.copy()
+                    optional_params.pop("tool_choice", None)
+        
+        return optional_params
+
     def transform_request(
         self,
         model: str,
@@ -68,6 +96,9 @@ class VertexAIAnthropicConfig(AnthropicConfig):
         litellm_params: dict,
         headers: dict,
     ) -> dict:
+        # Sanitize tool_choice before calling parent transform
+        optional_params = self._sanitize_tool_choice(optional_params)
+        
         data = super().transform_request(
             model=model,
             messages=messages,
@@ -77,6 +108,16 @@ class VertexAIAnthropicConfig(AnthropicConfig):
         )
 
         data.pop("model", None)  # vertex anthropic doesn't accept 'model' parameter
+        
+        # Also remove invalid tool_choice from the final request data
+        if "tool_choice" in data:
+            tc = data.get("tool_choice")
+            if isinstance(tc, dict) and tc.get("type") == "tool":
+                tool_info = tc.get("tool", {})
+                if not isinstance(tool_info, dict) or not tool_info.get("name"):
+                    import sys
+                    print(f"[DEBUG transform_request] Removing invalid tool_choice from data: {tc}", file=sys.stderr)
+                    data.pop("tool_choice", None)
         
         tools = optional_params.get("tools")
         tool_search_used = self.is_tool_search_used(tools)

@@ -3,7 +3,9 @@
 # Region: us-east5
 
 model_list:
-  # Claude Sonnet 4.5 on Vertex AI
+  # ==========================================================================
+  # Claude Sonnet 4.5 - Various name aliases Cursor might use
+  # ==========================================================================
   - model_name: claude-sonnet-4.5
     litellm_params:
       model: vertex_ai/claude-sonnet-4-5@20250929
@@ -12,8 +14,37 @@ model_list:
       drop_params: true
     model_info:
       mode: chat
-      
-  # Claude Opus 4.5 on Vertex AI  
+
+  - model_name: claude-4.5-sonnet
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
+  - model_name: claude-4.5-sonnet-thinking
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
+  # ==========================================================================
+  # Claude Opus 4.5 - Various name aliases Cursor might use
+  # ==========================================================================
   - model_name: claude-opus-4.5
     litellm_params:
       model: vertex_ai/claude-opus-4-5@20251101
@@ -23,22 +54,51 @@ model_list:
     model_info:
       mode: chat
 
-  # Wildcard for any vertex_ai claude model
-  - model_name: "vertex_ai/claude-*"
+  - model_name: claude-4.5-opus
     litellm_params:
-      model: "vertex_ai/claude-*"
+      model: vertex_ai/claude-opus-4-5@20251101
       vertex_project: gen-lang-client-0335698828
       vertex_location: us-east5
       drop_params: true
+    model_info:
+      mode: chat
+
+  - model_name: claude-4.5-opus-thinking
+    litellm_params:
+      model: vertex_ai/claude-opus-4-5@20251101
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
+  - model_name: claude-opus-4-5
+    litellm_params:
+      model: vertex_ai/claude-opus-4-5@20251101
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
+  # ==========================================================================
+  # Wildcard catch-all for any claude model name
+  # ==========================================================================
+  - model_name: "claude-*"
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
 
 litellm_settings:
   drop_params: true
   num_retries: 3
   request_timeout: 300
   telemetry: false
-  # Enable verbose logging to see debug output
   set_verbose: true
 
 general_settings:
   master_key: sk-litellm-cursor-proxy
-

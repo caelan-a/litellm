@@ -7014,6 +7014,8 @@ def validate_chat_completion_tool_choice(
     Confirm the tool choice is passed in the OpenAI format.
 
     Prevents user errors like: https://github.com/BerriAI/litellm/issues/7483
+    
+    When drop_params is enabled, invalid tool_choice values are dropped instead of raising errors.
     """
     from litellm.types.llms.openai import (
         ChatCompletionToolChoiceObjectParam,
@@ -7032,12 +7034,42 @@ def validate_chat_completion_tool_choice(
         ):
             return tool_choice
 
+        # Handle Cursor IDE format: {"type": "tool"} without tool.name -> drop if drop_params enabled
+        # Anthropic requires tool_choice.tool.name when type is "tool"
+        if tool_choice.get("type") == "tool":
+            tool_info = tool_choice.get("tool", {})
+            if not isinstance(tool_info, dict) or not tool_info.get("name"):
+                # Invalid tool_choice - drop it if drop_params is enabled
+                if litellm.drop_params:
+                    verbose_logger.debug(
+                        f"Dropping invalid tool_choice (drop_params=True): {tool_choice}"
+                    )
+                    return None
+                # Otherwise, treat it as "auto" which is a safe default
+                verbose_logger.debug(
+                    f"Converting invalid tool_choice to 'auto': {tool_choice}"
+                )
+                return "auto"
+
         # Standard OpenAI format: {"type": "function", "function": {...}}
         if tool_choice.get("type") is None or tool_choice.get("function") is None:
+            # If drop_params is enabled, drop instead of raising
+            if litellm.drop_params:
+                verbose_logger.debug(
+                    f"Dropping invalid tool_choice (drop_params=True): {tool_choice}"
+                )
+                return None
             raise Exception(
                 f"Invalid tool choice, tool_choice={tool_choice}. Please ensure tool_choice follows the OpenAI spec"
             )
         return tool_choice
+    
+    # If drop_params is enabled, drop invalid types instead of raising
+    if litellm.drop_params:
+        verbose_logger.debug(
+            f"Dropping invalid tool_choice type (drop_params=True): {tool_choice}"
+        )
+        return None
     raise Exception(
         f"Invalid tool choice, tool_choice={tool_choice}. Got={type(tool_choice)}. Expecting str, or dict. Please ensure tool_choice follows the OpenAI tool_choice spec"
     )
