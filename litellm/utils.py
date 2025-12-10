@@ -6978,8 +6978,17 @@ def validate_chat_completion_user_messages(messages: List[AllMessageValues]):
         List[dict]: The validated messages
 
     Raises:
-        ValueError: If any message is invalid
+        ValueError: If any message is invalid (unless drop_params is enabled)
     """
+    # Extended content types that Cursor/Anthropic might send
+    # These are additional to ValidUserMessageContentTypes
+    extended_content_types = [
+        "thinking",           # Anthropic thinking blocks
+        "redacted_thinking",  # Anthropic redacted thinking
+        "tool_use",           # Anthropic tool use
+        "tool_result",        # Anthropic tool results
+    ]
+    
     for idx, m in enumerate(messages):
         try:
             if m["role"] == "user":
@@ -6990,14 +6999,34 @@ def validate_chat_completion_user_messages(messages: List[AllMessageValues]):
                     elif isinstance(user_content, list):
                         for item in user_content:
                             if isinstance(item, dict):
-                                if item.get("type") not in ValidUserMessageContentTypes:
+                                content_type = item.get("type")
+                                if content_type not in ValidUserMessageContentTypes:
+                                    # Check if it's an extended type we should allow
+                                    if content_type in extended_content_types:
+                                        continue
+                                    # If drop_params is enabled, skip unknown types
+                                    if litellm.drop_params:
+                                        verbose_logger.debug(
+                                            f"Skipping unknown content type '{content_type}' at message index {idx} (drop_params=True)"
+                                        )
+                                        continue
                                     raise Exception("invalid content type")
         except Exception as e:
             if isinstance(e, KeyError):
+                if litellm.drop_params:
+                    verbose_logger.debug(
+                        f"Skipping invalid message at index {idx} (drop_params=True)"
+                    )
+                    continue
                 raise Exception(
                     f"Invalid message at index {idx}. Please ensure all messages are valid OpenAI chat completion messages."
                 )
             if "invalid content type" in str(e):
+                if litellm.drop_params:
+                    verbose_logger.debug(
+                        f"Skipping invalid user message at index {idx} (drop_params=True)"
+                    )
+                    continue
                 raise Exception(
                     f"Invalid user message at index {idx}. Please ensure all user messages are valid OpenAI chat completion messages."
                 )

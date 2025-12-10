@@ -72,6 +72,15 @@ model_list:
     model_info:
       mode: chat
 
+  - model_name: claude-4.5-opus-high-thinking
+    litellm_params:
+      model: vertex_ai/claude-opus-4-5@20251101
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
   - model_name: claude-opus-4-5
     litellm_params:
       model: vertex_ai/claude-opus-4-5@20251101
