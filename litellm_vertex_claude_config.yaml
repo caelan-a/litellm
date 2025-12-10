@@ -1,0 +1,44 @@
+# LiteLLM Proxy Config for Vertex AI Claude Models
+# Project: gen-lang-client-0335698828
+# Region: us-east5
+
+model_list:
+  # Claude Sonnet 4.5 on Vertex AI
+  - model_name: claude-sonnet-4.5
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+      
+  # Claude Opus 4.5 on Vertex AI  
+  - model_name: claude-opus-4.5
+    litellm_params:
+      model: vertex_ai/claude-opus-4-5@20251101
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+    model_info:
+      mode: chat
+
+  # Wildcard for any vertex_ai claude model
+  - model_name: "vertex_ai/claude-*"
+    litellm_params:
+      model: "vertex_ai/claude-*"
+      vertex_project: gen-lang-client-0335698828
+      vertex_location: us-east5
+      drop_params: true
+
+litellm_settings:
+  drop_params: true
+  num_retries: 3
+  request_timeout: 300
+  telemetry: false
+  # Enable verbose logging to see debug output
+  set_verbose: true
+
+general_settings:
+  master_key: sk-litellm-cursor-proxy
+

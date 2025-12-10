@@ -101,3 +101,59 @@ test-llm-translation-single: install-test-deps
 	poetry run pytest tests/llm_translation/$(FILE) \
 		--junitxml=test-results/junit.xml \
 		-v --tb=short --maxfail=100 --timeout=300
+
+# =============================================================================
+# Vertex AI Claude Proxy Targets
+# =============================================================================
+
+PROXY_PORT ?= 45678
+NGROK_PORT ?= $(PROXY_PORT)
+
+.PHONY: proxy-vertex proxy-vertex-debug ngrok ngrok-url proxy-test
+
+# Run the proxy with Vertex AI Claude config
+proxy-vertex:
+	@echo "Starting LiteLLM proxy for Vertex AI Claude on port $(PROXY_PORT)..."
+	poetry run litellm --config litellm_vertex_claude_config.yaml --port $(PROXY_PORT)
+
+# Run the proxy with debug logging
+proxy-vertex-debug:
+	@echo "Starting LiteLLM proxy for Vertex AI Claude on port $(PROXY_PORT) with debug logging..."
+	poetry run litellm --config litellm_vertex_claude_config.yaml --port $(PROXY_PORT) --detailed_debug
+
+# Start ngrok and display the URL
+ngrok:
+	@echo "Starting ngrok tunnel on port $(NGROK_PORT)..."
+	@echo "Press Ctrl+C to stop ngrok"
+	ngrok http $(NGROK_PORT)
+
+# Get ngrok URL (requires ngrok to be running with API enabled)
+ngrok-url:
+	@echo "Fetching ngrok public URL..."
+	@curl -s http://localhost:4040/api/tunnels | python3 -c "import sys, json; tunnels=json.load(sys.stdin)['tunnels']; print(tunnels[0]['public_url'] if tunnels else 'No tunnels found. Is ngrok running?')" 2>/dev/null || echo "ngrok API not available. Make sure ngrok is running."
+
+# Start ngrok in background and print URL
+ngrok-start:
+	@echo "Starting ngrok in background on port $(NGROK_PORT)..."
+	@ngrok http $(NGROK_PORT) > /dev/null 2>&1 &
+	@sleep 2
+	@echo "Ngrok URL:"
+	@curl -s http://localhost:4040/api/tunnels | python3 -c "import sys, json; tunnels=json.load(sys.stdin)['tunnels']; print(tunnels[0]['public_url'] if tunnels else 'Failed to get URL')" 2>/dev/null || echo "Failed to get ngrok URL"
+
+# Test the proxy
+proxy-test:
+	@echo "Testing Vertex AI Claude proxy..."
+	python test_vertex_claude.py --proxy-url http://localhost:$(PROXY_PORT)
+
+# Full setup: install, run proxy in background, start ngrok
+proxy-setup:
+	@echo "=== Vertex AI Claude Proxy Setup ==="
+	@echo "1. Make sure GOOGLE_APPLICATION_CREDENTIALS is set"
+	@echo "2. Run 'make proxy-vertex-debug' in one terminal"
+	@echo "3. Run 'make ngrok' in another terminal"
+	@echo "4. Run 'make proxy-test' to verify"
+	@echo ""
+	@echo "For Cursor IDE configuration:"
+	@echo "  - API Base: <ngrok-url>/v1"
+	@echo "  - API Key: sk-litellm-cursor-proxy"
+	@echo "  - Model: claude-sonnet-4.5 or claude-opus-4.5"

@@ -51,6 +51,15 @@ class VertexAIAnthropicConfig(AnthropicConfig):
     def custom_llm_provider(self) -> Optional[str]:
         return "vertex_ai"
 
+    # Beta flags that are known to be supported by Vertex AI Claude
+    # Other beta flags (prompt-caching, effort, files-api, etc.) are NOT supported
+    VERTEX_SUPPORTED_BETAS = {
+        "tool-search-tool-2025-10-19",  # Tool search
+        "web-search-2025-03-05",         # Web search
+        "computer-use-2024-10-22",       # Computer use
+        "computer-use-2025-01-24",       # Computer use (newer version)
+    }
+
     def transform_request(
         self,
         model: str,
@@ -71,21 +80,37 @@ class VertexAIAnthropicConfig(AnthropicConfig):
         
         tools = optional_params.get("tools")
         tool_search_used = self.is_tool_search_used(tools)
-        auto_betas = self.get_anthropic_beta_list(
-            model=model,
-            optional_params=optional_params,
-            computer_tool_used=self.is_computer_tool_used(tools),
-            prompt_caching_set=self.is_cache_control_set(messages),
-            file_id_used=self.is_file_id_used(messages),
-            mcp_server_used=self.is_mcp_server_used(optional_params.get("mcp_servers")),
-        )
-
-        beta_set = set(auto_betas)
+        computer_tool_used = self.is_computer_tool_used(tools)
+        web_search_tool_used = self.is_web_search_tool_used(tools)
+        
+        # Only add betas that are specifically supported by Vertex AI
+        # Do NOT use get_anthropic_beta_list() as it includes betas not supported by Vertex
+        beta_set = set()
+        
         if tool_search_used:
-            beta_set.add("tool-search-tool-2025-10-19")  # Vertex requires this header for tool search
+            beta_set.add("tool-search-tool-2025-10-19")
+        
+        if computer_tool_used:
+            beta_header = self.get_computer_tool_beta_header(computer_tool_used)
+            if beta_header in self.VERTEX_SUPPORTED_BETAS:
+                beta_set.add(beta_header)
+        
+        if web_search_tool_used:
+            beta_set.add("web-search-2025-03-05")
 
+        # DEBUG: Log what betas are being added to request body for Vertex
+        import sys
+        print(f"[DEBUG VertexAIAnthropicConfig.transform_request] model={model}", file=sys.stderr)
+        print(f"[DEBUG VertexAIAnthropicConfig.transform_request] tool_search_used={tool_search_used}", file=sys.stderr)
+        print(f"[DEBUG VertexAIAnthropicConfig.transform_request] computer_tool_used={computer_tool_used}", file=sys.stderr)
+        print(f"[DEBUG VertexAIAnthropicConfig.transform_request] web_search_tool_used={web_search_tool_used}", file=sys.stderr)
+        print(f"[DEBUG VertexAIAnthropicConfig.transform_request] beta_set={beta_set}", file=sys.stderr)
+        
         if beta_set:
             data["anthropic_beta"] = list(beta_set)
+            print(f"[DEBUG VertexAIAnthropicConfig.transform_request] Added to request body: anthropic_beta={list(beta_set)}", file=sys.stderr)
+        else:
+            print(f"[DEBUG VertexAIAnthropicConfig.transform_request] NO betas added to request body", file=sys.stderr)
         
         return data
 
