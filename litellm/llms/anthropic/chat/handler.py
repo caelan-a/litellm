@@ -79,6 +79,23 @@ async def make_call(
     if client is None:
         client = litellm.module_level_aclient
 
+    # DEBUG: Log the request being sent to Anthropic/Vertex
+    import sys
+    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"[DEBUG make_call] API Base: {api_base}", file=sys.stderr)
+    print(f"[DEBUG make_call] Model: {model}", file=sys.stderr)
+    print(f"[DEBUG make_call] Headers: {json.dumps({k: v[:50] + '...' if len(str(v)) > 50 else v for k, v in headers.items()}, indent=2)}", file=sys.stderr)
+    try:
+        data_dict = json.loads(data) if isinstance(data, str) else data
+        print(f"[DEBUG make_call] Request Body Keys: {list(data_dict.keys()) if isinstance(data_dict, dict) else 'not a dict'}", file=sys.stderr)
+        if isinstance(data_dict, dict):
+            print(f"[DEBUG make_call] Messages count: {len(data_dict.get('messages', []))}", file=sys.stderr)
+            for i, msg in enumerate(data_dict.get('messages', [])[:3]):
+                print(f"[DEBUG make_call] Message {i}: role={msg.get('role')}, content_type={type(msg.get('content')).__name__}", file=sys.stderr)
+    except:
+        print(f"[DEBUG make_call] Raw data (first 500 chars): {str(data)[:500]}", file=sys.stderr)
+    print(f"{'='*60}\n", file=sys.stderr)
+
     try:
         response = await client.post(
             api_base, headers=headers, data=data, stream=True, timeout=timeout
@@ -249,6 +266,17 @@ class AnthropicChatCompletion(BaseLLM):
         async_handler = client or get_async_httpx_client(
             llm_provider=litellm.LlmProviders.ANTHROPIC
         )
+
+        # DEBUG: Log the non-streaming request
+        import sys
+        print(f"\n{'='*60}", file=sys.stderr)
+        print(f"[DEBUG acompletion_function] API Base: {api_base}", file=sys.stderr)
+        print(f"[DEBUG acompletion_function] Model: {model}", file=sys.stderr)
+        print(f"[DEBUG acompletion_function] Request Body Keys: {list(data.keys())}", file=sys.stderr)
+        print(f"[DEBUG acompletion_function] Messages count: {len(data.get('messages', []))}", file=sys.stderr)
+        for i, msg in enumerate(data.get('messages', [])[:3]):
+            print(f"[DEBUG acompletion_function] Message {i}: role={msg.get('role')}, content_type={type(msg.get('content')).__name__}", file=sys.stderr)
+        print(f"{'='*60}\n", file=sys.stderr)
 
         try:
             response = await async_handler.post(

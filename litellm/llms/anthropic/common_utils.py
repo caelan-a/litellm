@@ -305,13 +305,19 @@ class AnthropicModelInfo(BaseLLMModelInfo):
             betas.update(user_anthropic_beta_headers)
 
         # Don't send any beta headers to Vertex, except web search which is required
+        # DEBUG: Log beta header decision
+        import sys
+        print(f"[DEBUG get_anthropic_headers] is_vertex_request={is_vertex_request}, betas={betas}", file=sys.stderr)
+        
         if is_vertex_request is True:
+            print(f"[DEBUG get_anthropic_headers] VERTEX REQUEST - stripping beta headers", file=sys.stderr)
             # Vertex AI requires web search beta header for web search to work
             if web_search_tool_used:
                 from litellm.types.llms.anthropic import ANTHROPIC_BETA_HEADER_VALUES
                 headers["anthropic-beta"] = ANTHROPIC_BETA_HEADER_VALUES.WEB_SEARCH_2025_03_05.value
         elif len(betas) > 0:
             headers["anthropic-beta"] = ",".join(betas)
+            print(f"[DEBUG get_anthropic_headers] Added beta header: {headers['anthropic-beta']}", file=sys.stderr)
 
         return headers
 
