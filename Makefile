@@ -18,6 +18,13 @@ help:
 	@echo "  make logs-watch     - 🔍 Watch logs (parsed & highlighted)"
 	@echo "  make logs-search pattern=\"term\" - 🔎 Search logs"
 	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "☁️  Cloud Deployment"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  make deploy-cloud   - 🚀 Deploy to GCE VM (one-time setup)"
+	@echo "  make deploy-update  - 🔄 Update code on cloud (preserves data)"
+	@echo "  📖 See DEPLOYMENT.md for details"
+	@echo ""
 	@echo "📖 First time? Read: VERTEX_CLAUDE_SETUP.md"
 	@echo "   (You'll need a free ngrok auth token)"
 	@echo ""
@@ -307,3 +314,17 @@ proxy-setup:
 	@echo "  - API Base: <ngrok-url>/v1"
 	@echo "  - API Key: sk-litellm-cursor-proxy"
 	@echo "  - Model: claude-sonnet-4.5 or claude-opus-4.5"
+
+#------------------------------------------------------------#
+# Cloud Deployment (GCE VM)
+#------------------------------------------------------------#
+
+deploy-cloud:  ## Deploy to GCE VM (one-time setup)
+	@echo "🚀 Deploying to Google Cloud..."
+	@echo ""
+	@./deploy_vm.sh
+
+deploy-update:  ## Update code on cloud VM (preserves PostgreSQL data)
+	@echo "🔄 Updating cloud deployment..."
+	@echo ""
+	@./update_vm.sh
