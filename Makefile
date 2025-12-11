@@ -5,25 +5,37 @@
 
 # Default target
 help:
-	@echo "Available commands:"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🚀 VERTEX AI CLAUDE PROXY (Docker-based)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  make start          - 🚀 Start proxy + ngrok"
+	@echo "  make stop-all       - 🛑 Stop everything"
+	@echo "  make restart        - 🔄 Restart everything"
+	@echo "  make url            - 📡 Show ngrok URL & Cursor config"
+	@echo "  make proxy-status   - 📊 Show service status"
+	@echo "  make logs           - 📜 Show proxy logs"
+	@echo "  make logs-follow    - 📜 Follow logs in real-time (raw)"
+	@echo "  make logs-watch     - 🔍 Watch logs (parsed & highlighted)"
+	@echo "  make logs-search pattern=\"term\" - 🔎 Search logs"
+	@echo ""
+	@echo "📖 First time? Read: VERTEX_CLAUDE_SETUP.md"
+	@echo "   (You'll need a free ngrok auth token)"
+	@echo ""
+	@echo "🐛 Debugging issues? Use: make logs-watch"
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📦 Development Commands"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  make install-dev        - Install development dependencies"
 	@echo "  make install-proxy-dev  - Install proxy development dependencies"
-	@echo "  make install-dev-ci     - Install dev dependencies (CI-compatible, pins OpenAI)"
-	@echo "  make install-proxy-dev-ci - Install proxy dev dependencies (CI-compatible)"
 	@echo "  make install-test-deps  - Install test dependencies"
-	@echo "  make install-helm-unittest - Install helm unittest plugin"
+	@echo ""
 	@echo "  make format             - Apply Black code formatting"
-	@echo "  make format-check       - Check Black code formatting (matches CI)"
-	@echo "  make lint               - Run all linting (Ruff, MyPy, Black check, circular imports, import safety)"
-	@echo "  make lint-ruff          - Run Ruff linting only"
-	@echo "  make lint-mypy          - Run MyPy type checking only"
-	@echo "  make lint-black         - Check Black formatting (matches CI)"
-	@echo "  make check-circular-imports - Check for circular imports"
-	@echo "  make check-import-safety - Check import safety"
+	@echo "  make lint               - Run all linting"
 	@echo "  make test               - Run all tests"
-	@echo "  make test-unit          - Run unit tests (tests/test_litellm)"
-	@echo "  make test-integration   - Run integration tests"
-	@echo "  make test-unit-helm     - Run helm unit tests"
+	@echo "  make test-unit          - Run unit tests"
+	@echo ""
+	@echo "For more commands, see the Makefile"
 
 # Installation targets
 install-dev:
@@ -108,18 +120,164 @@ test-llm-translation-single: install-test-deps
 
 PROXY_PORT ?= 45678
 NGROK_PORT ?= $(PROXY_PORT)
+PROXY_CONFIG ?= litellm_vertex_claude_config.yaml
 
 .PHONY: proxy-vertex proxy-vertex-debug ngrok ngrok-url proxy-test
+.PHONY: proxy-status proxy-stop ngrok-stop stop-all start restart url
+
+# ====================
+# 🚀 EASY COMMANDS (Docker-based)
+# ====================
+
+# Start everything (proxy + ngrok) in Docker
+start:
+	@echo "🚀 Starting LiteLLM Proxy + Ngrok (Docker)..."
+	@echo ""
+	@if [ ! -f ".env" ]; then \
+		echo "❌ ERROR: .env file not found!"; \
+		echo ""; \
+		echo "Create .env file with:"; \
+		echo "  NGROK_AUTHTOKEN=your_token_here"; \
+		echo ""; \
+		echo "Get token from: https://dashboard.ngrok.com/get-started/your-authtoken"; \
+		exit 1; \
+	fi
+	@if ! grep -q "NGROK_AUTHTOKEN=" .env; then \
+		echo "❌ ERROR: NGROK_AUTHTOKEN not set in .env file!"; \
+		echo ""; \
+		echo "Add this line to .env:"; \
+		echo "  NGROK_AUTHTOKEN=your_token_here"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$$GOOGLE_APPLICATION_CREDENTIALS" ] && [ ! -f "$$HOME/.config/gcloud/application_default_credentials.json" ]; then \
+		echo "⚠️  Warning: Google Cloud credentials not found"; \
+		echo "   Run: gcloud auth application-default login"; \
+		echo ""; \
+	fi
+	@docker-compose -f docker-compose.vertex-claude.yml up -d
+	@echo ""
+	@echo "⏳ Waiting for services to be ready..."
+	@sleep 7
+	@$(MAKE) -s proxy-status
+	@echo ""
+	@$(MAKE) -s url
+
+# Stop everything
+stop-all:
+	@echo "🛑 Stopping LiteLLM Proxy + Ngrok (Docker)..."
+	@docker-compose -f docker-compose.vertex-claude.yml down
+	@echo "✅ All services stopped"
+
+# Restart everything
+restart:
+	@echo "🔄 Restarting LiteLLM Proxy + Ngrok (Docker)..."
+	@docker-compose -f docker-compose.vertex-claude.yml restart
+	@sleep 5
+	@$(MAKE) -s url
+
+# Get the ngrok URL and show config
+url:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📡 NGROK PUBLIC URL:"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@URL=$$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys, json; data = json.load(sys.stdin); print(data['tunnels'][0]['public_url'] if data.get('tunnels') else '')" 2>/dev/null); \
+	if [ -z "$$URL" ]; then \
+		echo "❌ Ngrok not running or URL not available"; \
+		echo "   Run 'make start' to start services"; \
+	else \
+		echo ""; \
+		echo "🌐 Public URL: $$URL"; \
+		echo ""; \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+		echo "🔧 CURSOR CONFIGURATION:"; \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+		echo ""; \
+		echo "  API Base URL:  $$URL/v1"; \
+		echo "  API Key:       (any value works)"; \
+		echo ""; \
+		echo "  Available Models:"; \
+		echo "    • claude-sonnet-4.5"; \
+		echo "    • claude-4.5-sonnet"; \
+		echo "    • claude-4.5-sonnet-thinking"; \
+		echo "    • claude-opus-4.5"; \
+		echo "    • claude-4.5-opus"; \
+		echo "    • claude-4.5-opus-thinking"; \
+		echo ""; \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+		echo "📋 QUICK TEST:"; \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+		echo ""; \
+		echo "  curl $$URL/v1/chat/completions \\"; \
+		echo "    -H 'Content-Type: application/json' \\"; \
+		echo "    -d '{"; \
+		echo "      \"model\": \"claude-sonnet-4.5\","; \
+		echo "      \"messages\": [{\"role\": \"user\", \"content\": \"Hi\"}]"; \
+		echo "    }'"; \
+		echo ""; \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+	fi
+
+# Show status of all services
+proxy-status:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📊 SERVICE STATUS (Docker)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@docker-compose -f docker-compose.vertex-claude.yml ps
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "💡 Quick commands:"
+	@echo "   make start        - Start everything"
+	@echo "   make stop-all     - Stop everything"
+	@echo "   make restart      - Restart everything"
+	@echo "   make url          - Show ngrok URL & config"
+	@echo "   make logs         - Show proxy logs"
+	@echo "   make logs-follow  - Follow logs in real-time"
+
+# Show proxy logs
+logs:
+	@echo "📜 Proxy logs (last 50 lines):"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@docker-compose -f docker-compose.vertex-claude.yml logs --tail=50 litellm-proxy
+
+# Show ngrok logs
+logs-ngrok:
+	@echo "📜 Ngrok logs:"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@docker-compose -f docker-compose.vertex-claude.yml logs ngrok
+
+# Follow logs in real-time
+logs-follow:
+	@docker-compose -f docker-compose.vertex-claude.yml logs -f
+
+# Watch proxy logs with intelligent parsing (recommended)
+logs-watch:
+	@echo "🔍 Starting intelligent log watcher..."
+	@python3 parse_proxy_logs.py
+
+# Search logs for specific pattern
+logs-search:
+	@if [ -z "$(pattern)" ]; then \
+		echo "Usage: make logs-search pattern=\"your search term\""; \
+		echo "Example: make logs-search pattern=\"thinking\""; \
+	else \
+		docker-compose -f docker-compose.vertex-claude.yml logs litellm-proxy | grep -i "$(pattern)"; \
+	fi
+
+# ====================
+# 📝 ORIGINAL COMMANDS (kept for manual control)
+# ====================
 
 # Run the proxy with Vertex AI Claude config
 proxy-vertex:
 	@echo "Starting LiteLLM proxy for Vertex AI Claude on port $(PROXY_PORT)..."
-	poetry run litellm --config litellm_vertex_claude_config.yaml --port $(PROXY_PORT)
+	poetry run litellm --config $(PROXY_CONFIG) --port $(PROXY_PORT)
 
 # Run the proxy with debug logging
 proxy-vertex-debug:
 	@echo "Starting LiteLLM proxy for Vertex AI Claude on port $(PROXY_PORT) with debug logging..."
-	poetry run litellm --config litellm_vertex_claude_config.yaml --port $(PROXY_PORT) --detailed_debug
+	poetry run litellm --config $(PROXY_CONFIG) --port $(PROXY_PORT) --detailed_debug
 
 # Start ngrok and display the URL
 ngrok:
@@ -131,14 +289,6 @@ ngrok:
 ngrok-url:
 	@echo "Fetching ngrok public URL..."
 	@curl -s http://localhost:4040/api/tunnels | python3 -c "import sys, json; tunnels=json.load(sys.stdin)['tunnels']; print(tunnels[0]['public_url'] if tunnels else 'No tunnels found. Is ngrok running?')" 2>/dev/null || echo "ngrok API not available. Make sure ngrok is running."
-
-# Start ngrok in background and print URL
-ngrok-start:
-	@echo "Starting ngrok in background on port $(NGROK_PORT)..."
-	@ngrok http $(NGROK_PORT) > /dev/null 2>&1 &
-	@sleep 2
-	@echo "Ngrok URL:"
-	@curl -s http://localhost:4040/api/tunnels | python3 -c "import sys, json; tunnels=json.load(sys.stdin)['tunnels']; print(tunnels[0]['public_url'] if tunnels else 'Failed to get URL')" 2>/dev/null || echo "Failed to get ngrok URL"
 
 # Test the proxy
 proxy-test:

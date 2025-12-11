@@ -1,54 +1,56 @@
-docs
-cookbook
-.circleci
-.github
-tests
-.git
-.devcontainer
-*.tgz
-log.txt
-docker/Dockerfile.*
-
-# Claude Flow generated files (must be excluded from Docker build)
-.claude/
-.claude-flow/
-.swarm/
-.hive-mind/
-memory/
-coordination/
-claude-flow
-.mcp.json
-hive-mind-prompt-*.txt
-
-# Python virtual environments and version managers
-.venv/
-venv/
-**/.venv/
-**/venv/
-.python-version
-.pyenv/
+# Python
 __pycache__/
-**/__pycache__/
-*.pyc
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-**/pyvenv.cfg
-
-# Common project exclusions
-.vscode
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
-env/
-.pytest_cache
-.coverage
-htmlcov/
+*.egg-info/
 dist/
 build/
-*.egg-info/
-.DS_Store
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Docs
+docs/
+
+# Tests (keep for building)
+# tests/
+
+# Node modules
 node_modules/
+ui/litellm-dashboard/node_modules/
+
+# Logs
 *.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+.DS_Store
+
+# Environment
 .env
-.env.local
+.env.*
+ngrok.yml
+
+# Test files we created
+test*.txt
+why*.txt

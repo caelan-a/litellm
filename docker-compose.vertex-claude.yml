@@ -1,0 +1,52 @@
+version: '3.8'
+
+# Docker Compose automatically loads .env file from the same directory
+
+services:
+  # LiteLLM Proxy for Vertex AI Claude (custom build with fixes)
+  litellm-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.custom
+    image: litellm-vertex-claude-custom:latest
+    container_name: litellm-vertex-claude-proxy
+    ports:
+      - "45678:45678"
+    volumes:
+      - ./litellm_vertex_claude_config.yaml:/app/config.yaml:ro
+      - ./cursor_request_logger.py:/app/cursor_request_logger.py:ro
+      # Mount Google Cloud credentials
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}:/app/google-creds.json:ro
+      # Mount logs directory to host for easy access
+      - ./logs:/app/logs
+      # HOT RELOAD: Mount source code for instant changes without rebuilding
+      - ./litellm:/app/litellm:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-creds.json
+    command: ["--config", "/app/config.yaml", "--port", "45678"]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:45678/health/readiness')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # Ngrok tunnel
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: litellm-ngrok
+    ports:
+      - "4040:4040"  # Ngrok web interface
+    environment:
+      # REQUIRED: Set your ngrok auth token from https://dashboard.ngrok.com/get-started/your-authtoken
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: ["http", "litellm-proxy:45678"]
+    depends_on:
+      litellm-proxy:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  default:
+    name: litellm-vertex-network

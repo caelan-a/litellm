@@ -1,0 +1,17 @@
+Why is the Sky Blue?
+
+The sky appears blue due to a phenomenon called Rayleigh scattering.
+
+Here's how it works:
+
+1. Sunlight composition: Sunlight contains all colors of the visible spectrum (which we see as white light when combined).
+
+2. Atmospheric scattering: When sunlight enters Earth's atmosphere, it collides with gas molecules (primarily nitrogen and oxygen) and tiny particles in the air.
+
+3. Wavelength matters: Blue light has a shorter wavelength compared to other colors like red, orange, or yellow. Shorter wavelengths scatter more easily when they hit atmospheric molecules.
+
+4. Blue dominates: Blue and violet light scatter much more than longer wavelengths. Although violet scatters even more than blue, our eyes are more sensitive to blue light, and some violet light is absorbed by the upper atmosphere, so we perceive the sky as blue.
+
+5. Why not at sunset?: During sunrise and sunset, sunlight travels through more atmosphere to reach your eyes. This causes even the blue light to scatter away, leaving the longer wavelengths (reds and oranges) to dominate, which is why we see those beautiful warm colors.
+
+In space, where there's no atmosphere to scatter light, the sky appears black because there are no particles to scatter the sunlight.

@@ -802,6 +802,12 @@ class ModelResponseIterator:
 
             text, tool_use = self._handle_json_mode_chunk(text=text, tool_use=tool_use)
 
+            # For OpenAI compatibility: if content is empty but reasoning_content has text,
+            # copy reasoning_content to content so OpenAI-compatible clients (like Cursor)
+            # can display the thinking as regular text
+            if (not text or text == "") and reasoning_content:
+                text = reasoning_content
+
             returned_chunk = ModelResponseStream(
                 choices=[
                     StreamingChoices(

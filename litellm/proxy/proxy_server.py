@@ -4175,7 +4175,22 @@ async def async_data_generator(
                 str_so_far_parts.append(response_str)
 
             if isinstance(chunk, BaseModel):
-                chunk = chunk.model_dump_json(exclude_none=True, exclude_unset=True)
+                # Keep thinking_blocks for multi-turn conversation support
+                # Clients that preserve unknown fields will pass them back, enabling thinking continuity
+                # Only exclude provider_specific_fields which is truly internal
+                chunk = chunk.model_dump_json(
+                    exclude_none=True,
+                    exclude_unset=True,
+                    exclude={
+                        "choices": {
+                            "__all__": {
+                                "delta": {
+                                    "provider_specific_fields",
+                                }
+                            }
+                        }
+                    }
+                )
             elif isinstance(chunk, str) and chunk.startswith("data: "):
                 error_message = chunk
                 break

@@ -1,0 +1,32 @@
+# Custom LiteLLM with Vertex AI Claude fixes
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies including Node.js for prisma
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    git \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the entire litellm codebase (with your custom fixes)
+COPY . /app/
+
+# Install litellm from local source with Vertex AI support
+RUN pip install --no-cache-dir -e ".[proxy]" && \
+    pip install --no-cache-dir "google-cloud-aiplatform>=1.38" && \
+    pip install --no-cache-dir prisma
+
+# Generate prisma client
+RUN python3 -m prisma generate
+
+# Expose port
+EXPOSE 45678
+
+# Set entrypoint and default command
+ENTRYPOINT ["litellm"]
+CMD ["--config", "/app/config.yaml", "--port", "45678"]
