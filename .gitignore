@@ -102,3 +102,4 @@ litellm/proxy/_experimental/out/guardrails/index.html
 scripts/test_vertex_ai_search.py
 ngrok.yml
 .env
+postgres_data

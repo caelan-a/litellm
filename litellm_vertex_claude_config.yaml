@@ -115,4 +115,9 @@ litellm_settings:
   # Note: Cursor will send its own max_tokens, these are just fallbacks
   # Detailed logging: see logs/cursor_requests.jsonl and Docker logs
 
-# No auth required - proxy accepts any request
+# Database configuration for UI and persistence
+general_settings:
+  database_url: os.environ/DATABASE_URL
+  master_key: os.environ/LITELLM_MASTER_KEY
+  ui_username: admin
+  ui_password: os.environ/LITELLM_MASTER_KEY

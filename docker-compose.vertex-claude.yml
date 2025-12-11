@@ -3,6 +3,25 @@ version: '3.8'
 # Docker Compose automatically loads .env file from the same directory
 
 services:
+  # PostgreSQL database for LiteLLM UI and persistence
+  postgres:
+    image: postgres:15-alpine
+    container_name: litellm-postgres
+    environment:
+      - POSTGRES_DB=litellm
+      - POSTGRES_USER=litellm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-litellm_dev_password}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   # LiteLLM Proxy for Vertex AI Claude (custom build with fixes)
   litellm-proxy:
     build:
@@ -21,15 +40,22 @@ services:
       - ./logs:/app/logs
       # HOT RELOAD: Mount source code for instant changes without rebuilding
       - ./litellm:/app/litellm:ro
+      # PERSISTENCE: Mount database directory to persist usage data across restarts
+      - ./data:/app/data
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/google-creds.json
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - DATABASE_URL=postgresql://litellm:${POSTGRES_PASSWORD:-litellm_dev_password}@postgres:5432/litellm
     command: ["--config", "/app/config.yaml", "--port", "45678"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:45678/health/readiness')\" || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   # Ngrok tunnel

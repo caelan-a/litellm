@@ -27,6 +27,9 @@ RUN python3 -m prisma generate
 # Expose port
 EXPOSE 45678
 
+# Copy simple config (no database)
+COPY litellm_vertex_claude_config_simple.yaml /app/config_simple.yaml
+
 # Set entrypoint and default command
 ENTRYPOINT ["litellm"]
-CMD ["--config", "/app/config.yaml", "--port", "45678"]
+CMD ["--config", "/app/config_simple.yaml", "--port", "45678"]

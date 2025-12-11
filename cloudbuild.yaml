@@ -1,0 +1,12 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.custom'
+      - '-t'
+      - 'us-east5-docker.pkg.dev/gen-lang-client-0335698828/litellm-repo/litellm-proxy:latest'
+      - '.'
+images:
+  - 'us-east5-docker.pkg.dev/gen-lang-client-0335698828/litellm-repo/litellm-proxy:latest'
+timeout: 1200s
