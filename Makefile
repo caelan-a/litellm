@@ -21,8 +21,9 @@ help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "☁️  Cloud Deployment"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  make deploy-cloud   - 🚀 Deploy to GCE VM (one-time setup)"
-	@echo "  make deploy-update  - 🔄 Update code on cloud (preserves data)"
+	@echo "  make init-cloud     - 🚀 Initialize GCE VM (one-time setup)"
+	@echo "  make deploy         - 🔄 Deploy code updates (preserves data)"
+	@echo "  make setup-https    - 🔒 Setup HTTPS with Cloudflare Tunnel"
 	@echo "  📖 See DEPLOYMENT.md for details"
 	@echo ""
 	@echo "📖 First time? Read: VERTEX_CLAUDE_SETUP.md"
@@ -319,12 +320,17 @@ proxy-setup:
 # Cloud Deployment (GCE VM)
 #------------------------------------------------------------#
 
-deploy-cloud:  ## Deploy to GCE VM (one-time setup)
-	@echo "🚀 Deploying to Google Cloud..."
+init-cloud:  ## Initialize GCE VM (one-time setup)
+	@echo "🚀 Initializing cloud infrastructure..."
 	@echo ""
 	@./deploy_vm.sh
 
-deploy-update:  ## Update code on cloud VM (preserves PostgreSQL data)
-	@echo "🔄 Updating cloud deployment..."
+deploy:  ## Deploy code updates to cloud VM (preserves PostgreSQL data)
+	@echo "🔄 Deploying updates to cloud..."
 	@echo ""
 	@./update_vm.sh
+
+setup-https:  ## Setup HTTPS with Cloudflare Tunnel (quick & free)
+	@echo "🔒 Setting up HTTPS..."
+	@echo ""
+	@./setup_https.sh

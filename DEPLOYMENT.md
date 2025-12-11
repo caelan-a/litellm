@@ -30,7 +30,7 @@ cat .env
 ### Deploy to Cloud
 
 ```bash
-make deploy-cloud
+make init-cloud
 ```
 
 This will:
@@ -51,7 +51,7 @@ This will:
 After making changes to your LiteLLM code:
 
 ```bash
-make deploy-update
+make deploy
 ```
 
 This will:
@@ -90,7 +90,7 @@ make stop-all
 1. Edit `litellm/llms/vertex_ai/vertex_ai_partner_models/anthropic/transformation.py`
 2. Run `make restart` (or just restart the container - volume mount picks up changes)
 3. Test with Cursor pointing to ngrok URL
-4. When satisfied, deploy to cloud with `make deploy-update`
+4. When satisfied, deploy to cloud with `make deploy`
 
 ---
 
@@ -357,8 +357,8 @@ gcloud artifacts docker images delete IMAGE_NAME --delete-tags --quiet
 
 | Task | Command |
 |------|---------|
-| Initial cloud deploy | `make deploy-cloud` |
-| Update code on cloud | `make deploy-update` |
+| Initial cloud setup | `make init-cloud` |
+| Deploy code updates | `make deploy` |
 | Start local dev | `make start` |
 | Stop local dev | `make stop-all` |
 | View logs (local) | `make logs-watch` |
